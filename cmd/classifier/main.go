@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
 	"errors"
 	"flag"
@@ -74,6 +75,9 @@ func run() error {
 		return fmt.Errorf("create destination: %w", err)
 	}
 
+	imageHashes := make(map[string]struct{})
+	var skipped []string
+
 	walkErr := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -93,6 +97,19 @@ func run() error {
 
 		name := d.Name()
 		category := resolver.categoryFor(name)
+
+		var hash string
+		if category == "images" {
+			hash, err = fileHash(path)
+			if err != nil {
+				return err
+			}
+			if _, exists := imageHashes[hash]; exists {
+				skipped = append(skipped, path)
+				return nil
+			}
+		}
+
 		targetDir := filepath.Join(dest, category)
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("create category directory %s: %w", targetDir, err)
@@ -107,10 +124,24 @@ func run() error {
 			return err
 		}
 
+		if category == "images" && hash != "" {
+			imageHashes[hash] = struct{}{}
+		}
+
 		return nil
 	})
 
-	return walkErr
+	if walkErr != nil {
+		return walkErr
+	}
+
+	if len(skipped) > 0 {
+		if err := writeWarnings(filepath.Join(dest, "warn.txt"), skipped); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func usageError(msg string) error {
@@ -228,4 +259,26 @@ func uniqueDestPath(dir, name string) (string, error) {
 			return "", fmt.Errorf("stat destination %s: %w", candidate, err)
 		}
 	}
+}
+
+func fileHash(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open for hash %s: %w", path, err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("hash %s: %w", path, err)
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+func writeWarnings(path string, entries []string) error {
+	content := strings.Join(entries, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write warnings: %w", err)
+	}
+	return nil
 }

@@ -89,6 +89,41 @@ func TestCLI_HandlesDuplicateFilenames(t *testing.T) {
 	}
 }
 
+func TestCLI_SkipsDuplicateImagesByContent(t *testing.T) {
+	workspace := t.TempDir()
+	src := filepath.Join(workspace, "src")
+	dest := filepath.Join(workspace, "dest")
+
+	mustMkdir(t, src)
+	writeFile(t, src, "alpha.jpg", "same")
+
+	nested := filepath.Join(src, "nested")
+	mustMkdir(t, nested)
+	writeFile(t, nested, "beta.jpg", "same")
+
+	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	if res.err != nil {
+		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
+	}
+
+	imagesDir := filepath.Join(dest, "images")
+	entries, err := os.ReadDir(imagesDir)
+	if err != nil {
+		t.Fatalf("expected images directory, got: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 file in images, got %d", len(entries))
+	}
+
+	assertFileContent(t, filepath.Join(imagesDir, "alpha.jpg"), "same")
+
+	warnPath := filepath.Join(dest, "warn.txt")
+	content := readFile(t, warnPath)
+	if !strings.Contains(content, filepath.Join(src, "nested", "beta.jpg")) {
+		t.Fatalf("warn.txt should contain skipped file path, got: %s", content)
+	}
+}
+
 func TestCLI_RejectsRelativePaths(t *testing.T) {
 	workspace := t.TempDir()
 	src := filepath.Join(workspace, "src")
