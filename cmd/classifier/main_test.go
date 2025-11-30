@@ -137,6 +137,64 @@ func TestCLI_SkipsDuplicateImagesByContent(t *testing.T) {
 	}
 }
 
+func TestCLI_DefaultConfigUsedWhenNoFlag(t *testing.T) {
+	workspace := t.TempDir()
+	src := filepath.Join(workspace, "src")
+	dest := filepath.Join(workspace, "dest")
+
+	mustMkdir(t, src)
+	writeFile(t, src, "alpha.jpg", "img")
+	writeFile(t, src, "bravo.txt", "doc")
+
+	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	if res.err != nil {
+		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
+	}
+
+	assertFileContent(t, filepath.Join(dest, "images", "alpha.jpg"), "img")
+	assertFileContent(t, filepath.Join(dest, "documents", "bravo.txt"), "doc")
+
+	if _, err := os.Stat(filepath.Join(dest, "warn.csv")); err == nil {
+		t.Fatalf("warn.csv should not exist when nothing skipped")
+	}
+}
+
+func TestCLI_MultipleDuplicateImagesProduceMultipleWarnings(t *testing.T) {
+	workspace := t.TempDir()
+	src := filepath.Join(workspace, "src")
+	dest := filepath.Join(workspace, "dest")
+
+	mustMkdir(t, src)
+	writeFile(t, src, "alpha.jpg", "same")
+	writeFile(t, src, "bravo.jpg", "same")
+
+	nested := filepath.Join(src, "nested")
+	mustMkdir(t, nested)
+	writeFile(t, nested, "charlie.jpg", "same")
+
+	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	if res.err != nil {
+		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
+	}
+
+	warnPath := filepath.Join(dest, "warn.csv")
+	content := readFile(t, warnPath)
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 warning lines, got %d", len(lines))
+	}
+
+	for _, line := range lines {
+		parts := strings.Split(line, ",")
+		if len(parts) != 2 {
+			t.Fatalf("expected 2 columns in warn.csv, got %d", len(parts))
+		}
+		if parts[1] != filepath.Join(dest, "images", "alpha.jpg") {
+			t.Fatalf("expected dest to reference first copied image, got %s", parts[1])
+		}
+	}
+}
+
 func TestCLI_RejectsRelativePaths(t *testing.T) {
 	workspace := t.TempDir()
 	src := filepath.Join(workspace, "src")
