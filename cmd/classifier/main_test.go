@@ -195,6 +195,52 @@ func TestCLI_MultipleDuplicateImagesProduceMultipleWarnings(t *testing.T) {
 	}
 }
 
+func TestCLI_SkipsDuplicateMoviesByContent(t *testing.T) {
+	workspace := t.TempDir()
+	src := filepath.Join(workspace, "src")
+	dest := filepath.Join(workspace, "dest")
+
+	mustMkdir(t, src)
+	writeFile(t, src, "alpha.mp4", "video")
+
+	nested := filepath.Join(src, "nested")
+	mustMkdir(t, nested)
+	writeFile(t, nested, "beta.mp4", "video")
+
+	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	if res.err != nil {
+		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
+	}
+
+	moviesDir := filepath.Join(dest, "movies")
+	entries, err := os.ReadDir(moviesDir)
+	if err != nil {
+		t.Fatalf("expected movies directory, got: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 file in movies, got %d", len(entries))
+	}
+
+	assertFileContent(t, filepath.Join(moviesDir, "alpha.mp4"), "video")
+
+	warnPath := filepath.Join(dest, "warn.csv")
+	content := readFile(t, warnPath)
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 warning line, got %d", len(lines))
+	}
+	parts := strings.Split(lines[0], ",")
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 columns in warn.csv, got %d", len(parts))
+	}
+	if parts[0] != filepath.Join(src, "nested", "beta.mp4") {
+		t.Fatalf("unexpected src in warn.csv: %s", parts[0])
+	}
+	if parts[1] != filepath.Join(dest, "movies", "alpha.mp4") {
+		t.Fatalf("unexpected dest in warn.csv: %s", parts[1])
+	}
+}
+
 func TestCLI_RejectsRelativePaths(t *testing.T) {
 	workspace := t.TempDir()
 	src := filepath.Join(workspace, "src")

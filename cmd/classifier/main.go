@@ -34,6 +34,11 @@ type skippedEntry struct {
 	destPath string
 }
 
+var hashedCategories = map[string]bool{
+	"images": true,
+	"movies": true,
+}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -81,7 +86,7 @@ func run() error {
 		return fmt.Errorf("create destination: %w", err)
 	}
 
-	imageHashes := make(map[string]string)
+	categoryHashes := make(map[string]map[string]string)
 	var skipped []skippedEntry
 
 	walkErr := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
@@ -105,12 +110,15 @@ func run() error {
 		category := resolver.categoryFor(name)
 
 		var hash string
-		if category == "images" {
+		if hashedCategories[category] {
 			hash, err = fileHash(path)
 			if err != nil {
 				return err
 			}
-			if existingPath, exists := imageHashes[hash]; exists {
+			if categoryHashes[category] == nil {
+				categoryHashes[category] = map[string]string{}
+			}
+			if existingPath, exists := categoryHashes[category][hash]; exists {
 				skipped = append(skipped, skippedEntry{srcPath: path, destPath: existingPath})
 				return nil
 			}
@@ -130,8 +138,8 @@ func run() error {
 			return err
 		}
 
-		if category == "images" && hash != "" {
-			imageHashes[hash] = finalPath
+		if hashedCategories[category] && hash != "" {
+			categoryHashes[category][hash] = finalPath
 		}
 
 		return nil
