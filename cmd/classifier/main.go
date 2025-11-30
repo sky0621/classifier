@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"embed"
+	"encoding/csv"
 	"errors"
 	"flag"
 	"fmt"
@@ -27,6 +28,11 @@ type category struct {
 
 //go:embed config.yaml
 var embeddedFS embed.FS
+
+type skippedEntry struct {
+	srcPath  string
+	destPath string
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -75,8 +81,8 @@ func run() error {
 		return fmt.Errorf("create destination: %w", err)
 	}
 
-	imageHashes := make(map[string]struct{})
-	var skipped []string
+	imageHashes := make(map[string]string)
+	var skipped []skippedEntry
 
 	walkErr := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -104,8 +110,8 @@ func run() error {
 			if err != nil {
 				return err
 			}
-			if _, exists := imageHashes[hash]; exists {
-				skipped = append(skipped, path)
+			if existingPath, exists := imageHashes[hash]; exists {
+				skipped = append(skipped, skippedEntry{srcPath: path, destPath: existingPath})
 				return nil
 			}
 		}
@@ -125,7 +131,7 @@ func run() error {
 		}
 
 		if category == "images" && hash != "" {
-			imageHashes[hash] = struct{}{}
+			imageHashes[hash] = finalPath
 		}
 
 		return nil
@@ -136,7 +142,7 @@ func run() error {
 	}
 
 	if len(skipped) > 0 {
-		if err := writeWarnings(filepath.Join(dest, "warn.txt"), skipped); err != nil {
+		if err := writeWarnings(filepath.Join(dest, "warn.csv"), skipped); err != nil {
 			return err
 		}
 	}
@@ -275,9 +281,21 @@ func fileHash(path string) (string, error) {
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-func writeWarnings(path string, entries []string) error {
-	content := strings.Join(entries, "\n") + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+func writeWarnings(path string, entries []skippedEntry) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("write warnings: %w", err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	for _, e := range entries {
+		if err := w.Write([]string{e.srcPath, e.destPath}); err != nil {
+			return fmt.Errorf("write warnings: %w", err)
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
 		return fmt.Errorf("write warnings: %w", err)
 	}
 	return nil

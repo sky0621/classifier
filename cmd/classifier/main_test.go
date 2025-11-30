@@ -117,10 +117,23 @@ func TestCLI_SkipsDuplicateImagesByContent(t *testing.T) {
 
 	assertFileContent(t, filepath.Join(imagesDir, "alpha.jpg"), "same")
 
-	warnPath := filepath.Join(dest, "warn.txt")
+	warnPath := filepath.Join(dest, "warn.csv")
 	content := readFile(t, warnPath)
-	if !strings.Contains(content, filepath.Join(src, "nested", "beta.jpg")) {
-		t.Fatalf("warn.txt should contain skipped file path, got: %s", content)
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 warning line, got %d", len(lines))
+	}
+	parts := strings.Split(lines[0], ",")
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 columns in warn.csv, got %d", len(parts))
+	}
+	srcPath := parts[0]
+	destPath := parts[1]
+	if srcPath != filepath.Join(src, "nested", "beta.jpg") {
+		t.Fatalf("unexpected src in warn.csv: %s", srcPath)
+	}
+	if destPath != filepath.Join(dest, "images", "alpha.jpg") {
+		t.Fatalf("unexpected dest in warn.csv: %s", destPath)
 	}
 }
 
