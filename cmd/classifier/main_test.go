@@ -23,7 +23,7 @@ func TestCLI_ClassifiesFilesByConfig(t *testing.T) {
 
 	nested := filepath.Join(src, "nested")
 	mustMkdir(t, nested)
-	writeFile(t, nested, "charlie.txt", "charlie")
+	writeFile(t, nested, "foxtrot.txt", "foxtrot")
 
 	configPath := filepath.Join(workspace, "config.yaml")
 	writeFile(t, workspace, "config.yaml", `categories:
@@ -47,13 +47,11 @@ default_category: others
 	assertFileContent(t, filepath.Join(dest, "images", "bravo.png"), "bravo")
 	assertFileContent(t, filepath.Join(dest, "movies", "charlie.mp4"), "charlie")
 	assertFileContent(t, filepath.Join(dest, "documents", "delta.txt"), "delta")
+	assertFileContent(t, filepath.Join(dest, "documents", "foxtrot.txt"), "foxtrot")
 	assertFileContent(t, filepath.Join(dest, "others", "echo"), "noext")
 
 	if _, err := os.Stat(filepath.Join(dest, "nested")); err == nil {
-		t.Fatalf("did not expect nested directory to be copied")
-	}
-	if _, err := os.Stat(filepath.Join(dest, "images", "nested", "charlie.txt")); err == nil {
-		t.Fatalf("did not expect nested files to be copied")
+		t.Fatalf("did not expect nested directory structure to be preserved")
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,22 +35,22 @@ func main() {
 }
 
 func run() error {
-	fs := flag.NewFlagSet("classifier", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	flagSet := flag.NewFlagSet("classifier", flag.ContinueOnError)
+	flagSet.SetOutput(io.Discard)
 	var configPath string
-	fs.StringVar(&configPath, "config", "", "path to YAML config file")
-	fs.StringVar(&configPath, "c", "", "path to YAML config file")
+	flagSet.StringVar(&configPath, "config", "", "path to YAML config file")
+	flagSet.StringVar(&configPath, "c", "", "path to YAML config file")
 
-	if err := fs.Parse(os.Args[1:]); err != nil {
+	if err := flagSet.Parse(os.Args[1:]); err != nil {
 		return err
 	}
 
-	if fs.NArg() != 2 {
+	if flagSet.NArg() != 2 {
 		return usageError("expected 2 arguments: <src-abs-dir> <dest-abs-dir>")
 	}
 
-	src := fs.Arg(0)
-	dest := fs.Arg(1)
+	src := flagSet.Arg(0)
+	dest := flagSet.Arg(1)
 
 	if !filepath.IsAbs(src) || !filepath.IsAbs(dest) {
 		return usageError("source and destination must be absolute paths")
@@ -73,37 +74,38 @@ func run() error {
 		return fmt.Errorf("create destination: %w", err)
 	}
 
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return fmt.Errorf("read source entries: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			// Skip nested directories; only copy direct files.
-			continue
-		}
-		info, err := entry.Info()
+	walkErr := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return fmt.Errorf("stat source entry %s: %w", entry.Name(), err)
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("stat source entry %s: %w", path, err)
 		}
 		if !info.Mode().IsRegular() {
 			// Skip non-regular files (symlinks, devices, etc.).
-			continue
+			return nil
 		}
 
-		category := resolver.categoryFor(entry.Name())
+		name := d.Name()
+		category := resolver.categoryFor(name)
 		targetDir := filepath.Join(dest, category)
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("create category directory %s: %w", targetDir, err)
 		}
 
-		if err := copyFile(filepath.Join(src, entry.Name()), filepath.Join(targetDir, entry.Name()), info.Mode()); err != nil {
+		if err := copyFile(path, filepath.Join(targetDir, name), info.Mode()); err != nil {
 			return err
 		}
-	}
 
-	return nil
+		return nil
+	})
+
+	return walkErr
 }
 
 func usageError(msg string) error {
