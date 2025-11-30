@@ -98,7 +98,12 @@ func run() error {
 			return fmt.Errorf("create category directory %s: %w", targetDir, err)
 		}
 
-		if err := copyFile(path, filepath.Join(targetDir, name), info.Mode()); err != nil {
+		finalPath, err := uniqueDestPath(targetDir, name)
+		if err != nil {
+			return err
+		}
+
+		if err := copyFile(path, finalPath, info.Mode()); err != nil {
 			return err
 		}
 
@@ -200,4 +205,27 @@ func copyFile(src, dest string, perm os.FileMode) error {
 	}
 
 	return nil
+}
+
+func uniqueDestPath(dir, name string) (string, error) {
+	target := filepath.Join(dir, name)
+	if _, err := os.Stat(target); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return target, nil
+		}
+		return "", fmt.Errorf("stat destination %s: %w", target, err)
+	}
+
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+
+	for i := 1; ; i++ {
+		candidate := filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
+		if _, err := os.Stat(candidate); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return candidate, nil
+			}
+			return "", fmt.Errorf("stat destination %s: %w", candidate, err)
+		}
+	}
 }
