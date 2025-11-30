@@ -17,6 +17,7 @@ func TestCLI_CopiesDirectFiles(t *testing.T) {
 	mustMkdir(t, src)
 	writeFile(t, src, "alpha.txt", "alpha")
 	writeFile(t, src, "bravo.log", "bravo")
+	writeFile(t, src, "charlie", "noext")
 
 	nested := filepath.Join(src, "nested")
 	mustMkdir(t, nested)
@@ -27,31 +28,15 @@ func TestCLI_CopiesDirectFiles(t *testing.T) {
 		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
 	}
 
-	entries, err := os.ReadDir(dest)
-	if err != nil {
-		t.Fatalf("expected destination directory, got: %v", err)
-	}
+	assertFileContent(t, filepath.Join(dest, "txt", "alpha.txt"), "alpha")
+	assertFileContent(t, filepath.Join(dest, "log", "bravo.log"), "bravo")
+	assertFileContent(t, filepath.Join(dest, "no_ext", "charlie"), "noext")
 
-	names := make(map[string]bool, len(entries))
-	for _, entry := range entries {
-		names[entry.Name()] = true
-	}
-
-	if !names["alpha.txt"] || !names["bravo.log"] {
-		t.Fatalf("expected alpha.txt and bravo.log to be copied, got: %v", names)
-	}
-	if names["nested"] {
+	if _, err := os.Stat(filepath.Join(dest, "nested")); err == nil {
 		t.Fatalf("did not expect nested directory to be copied")
 	}
-	if _, err := os.Stat(filepath.Join(dest, "nested", "charlie.txt")); err == nil {
+	if _, err := os.Stat(filepath.Join(dest, "txt", "nested", "charlie.txt")); err == nil {
 		t.Fatalf("did not expect nested files to be copied")
-	}
-
-	if got := readFile(t, filepath.Join(dest, "alpha.txt")); got != "alpha" {
-		t.Fatalf("unexpected content for alpha.txt: %s", got)
-	}
-	if got := readFile(t, filepath.Join(dest, "bravo.log")); got != "bravo" {
-		t.Fatalf("unexpected content for bravo.log: %s", got)
 	}
 }
 
@@ -162,4 +147,12 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("failed to read %s: %v", path, err)
 	}
 	return string(content)
+}
+
+func assertFileContent(t *testing.T, path string, want string) {
+	t.Helper()
+	got := readFile(t, path)
+	if got != want {
+		t.Fatalf("unexpected content for %s: got %q want %q", path, got, want)
+	}
 }

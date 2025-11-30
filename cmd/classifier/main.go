@@ -57,7 +57,14 @@ func run() error {
 			// Skip non-regular files (symlinks, devices, etc.).
 			continue
 		}
-		if err := copyFile(filepath.Join(src, entry.Name()), filepath.Join(dest, entry.Name()), info.Mode()); err != nil {
+
+		category := extCategory(entry.Name())
+		targetDir := filepath.Join(dest, category)
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
+			return fmt.Errorf("create category directory %s: %w", targetDir, err)
+		}
+
+		if err := copyFile(filepath.Join(src, entry.Name()), filepath.Join(targetDir, entry.Name()), info.Mode()); err != nil {
 			return err
 		}
 	}
@@ -87,4 +94,12 @@ func copyFile(src, dest string, perm os.FileMode) error {
 	}
 
 	return nil
+}
+
+func extCategory(name string) string {
+	ext := filepath.Ext(name)
+	if ext == "" {
+		return "no_ext"
+	}
+	return ext[1:]
 }
