@@ -26,6 +26,8 @@ type category struct {
 	Extensions []string `yaml:"extensions"`
 }
 
+const minImageSize int64 = 1 << 20 // 1 MiB
+
 //go:embed config.yaml
 var embeddedFS embed.FS
 
@@ -108,6 +110,11 @@ func run() error {
 
 		name := d.Name()
 		category := resolver.categoryFor(name)
+
+		if category == "images" && info.Size() < minImageSize {
+			// Skip tiny images to avoid noise.
+			return nil
+		}
 
 		var hash string
 		if hashedCategories[category] {

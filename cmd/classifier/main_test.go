@@ -15,8 +15,10 @@ func TestCLI_ClassifiesFilesByConfig(t *testing.T) {
 	dest := filepath.Join(workspace, "dest")
 
 	mustMkdir(t, src)
-	writeFile(t, src, "alpha.jpg", "alpha")
-	writeFile(t, src, "bravo.png", "bravo")
+	alphaImg := strings.Repeat("a", 2*1024*1024)
+	bravoImg := strings.Repeat("b", 2*1024*1024)
+	writeFile(t, src, "alpha.jpg", alphaImg)
+	writeFile(t, src, "bravo.png", bravoImg)
 	writeFile(t, src, "charlie.mp4", "charlie")
 	writeFile(t, src, "delta.txt", "delta")
 	writeFile(t, src, "echo", "noext")
@@ -43,8 +45,8 @@ default_category: others
 		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
 	}
 
-	assertFileContent(t, filepath.Join(dest, "images", "alpha.jpg"), "alpha")
-	assertFileContent(t, filepath.Join(dest, "images", "bravo.png"), "bravo")
+	assertFileContent(t, filepath.Join(dest, "images", "alpha.jpg"), alphaImg)
+	assertFileContent(t, filepath.Join(dest, "images", "bravo.png"), bravoImg)
 	assertFileContent(t, filepath.Join(dest, "movies", "charlie.mp4"), "charlie")
 	assertFileContent(t, filepath.Join(dest, "documents", "delta.txt"), "delta")
 	assertFileContent(t, filepath.Join(dest, "documents", "foxtrot.txt"), "foxtrot")
@@ -61,11 +63,13 @@ func TestCLI_HandlesDuplicateFilenames(t *testing.T) {
 	dest := filepath.Join(workspace, "dest")
 
 	mustMkdir(t, src)
-	writeFile(t, src, "alpha.jpg", "root")
+	rootContent := strings.Repeat("r", 2*1024*1024)
+	nestedContent := strings.Repeat("n", 2*1024*1024)
+	writeFile(t, src, "alpha.jpg", rootContent)
 
 	nested := filepath.Join(src, "nested")
 	mustMkdir(t, nested)
-	writeFile(t, nested, "alpha.jpg", "nested")
+	writeFile(t, nested, "alpha.jpg", nestedContent)
 
 	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
 	if res.err != nil {
@@ -84,7 +88,7 @@ func TestCLI_HandlesDuplicateFilenames(t *testing.T) {
 	root := readFile(t, filepath.Join(imagesDir, "alpha.jpg"))
 	dupe := readFile(t, filepath.Join(imagesDir, "alpha_1.jpg"))
 
-	if root != "root" || dupe != "nested" {
+	if root != rootContent || dupe != nestedContent {
 		t.Fatalf("unexpected duplicate handling, got alpha.jpg=%q alpha_1.jpg=%q", root, dupe)
 	}
 }
@@ -95,11 +99,12 @@ func TestCLI_SkipsDuplicateImagesByContent(t *testing.T) {
 	dest := filepath.Join(workspace, "dest")
 
 	mustMkdir(t, src)
-	writeFile(t, src, "alpha.jpg", "same")
+	duplicate := strings.Repeat("d", 2*1024*1024)
+	writeFile(t, src, "alpha.jpg", duplicate)
 
 	nested := filepath.Join(src, "nested")
 	mustMkdir(t, nested)
-	writeFile(t, nested, "beta.jpg", "same")
+	writeFile(t, nested, "beta.jpg", duplicate)
 
 	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
 	if res.err != nil {
@@ -115,7 +120,7 @@ func TestCLI_SkipsDuplicateImagesByContent(t *testing.T) {
 		t.Fatalf("expected 1 file in images, got %d", len(entries))
 	}
 
-	assertFileContent(t, filepath.Join(imagesDir, "alpha.jpg"), "same")
+	assertFileContent(t, filepath.Join(imagesDir, "alpha.jpg"), duplicate)
 
 	warnPath := filepath.Join(dest, "warn.csv")
 	content := readFile(t, warnPath)
@@ -143,7 +148,8 @@ func TestCLI_DefaultConfigUsedWhenNoFlag(t *testing.T) {
 	dest := filepath.Join(workspace, "dest")
 
 	mustMkdir(t, src)
-	writeFile(t, src, "alpha.jpg", "img")
+	imgContent := strings.Repeat("i", 2*1024*1024)
+	writeFile(t, src, "alpha.jpg", imgContent)
 	writeFile(t, src, "bravo.txt", "doc")
 
 	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
@@ -151,7 +157,7 @@ func TestCLI_DefaultConfigUsedWhenNoFlag(t *testing.T) {
 		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
 	}
 
-	assertFileContent(t, filepath.Join(dest, "images", "alpha.jpg"), "img")
+	assertFileContent(t, filepath.Join(dest, "images", "alpha.jpg"), imgContent)
 	assertFileContent(t, filepath.Join(dest, "documents", "bravo.txt"), "doc")
 
 	if _, err := os.Stat(filepath.Join(dest, "warn.csv")); err == nil {
@@ -165,12 +171,13 @@ func TestCLI_MultipleDuplicateImagesProduceMultipleWarnings(t *testing.T) {
 	dest := filepath.Join(workspace, "dest")
 
 	mustMkdir(t, src)
-	writeFile(t, src, "alpha.jpg", "same")
-	writeFile(t, src, "bravo.jpg", "same")
+	duplicate := strings.Repeat("x", 2*1024*1024)
+	writeFile(t, src, "alpha.jpg", duplicate)
+	writeFile(t, src, "bravo.jpg", duplicate)
 
 	nested := filepath.Join(src, "nested")
 	mustMkdir(t, nested)
-	writeFile(t, nested, "charlie.jpg", "same")
+	writeFile(t, nested, "charlie.jpg", duplicate)
 
 	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
 	if res.err != nil {
@@ -201,11 +208,12 @@ func TestCLI_SkipsDuplicateMoviesByContent(t *testing.T) {
 	dest := filepath.Join(workspace, "dest")
 
 	mustMkdir(t, src)
-	writeFile(t, src, "alpha.mp4", "video")
+	content := strings.Repeat("v", 2*1024*1024)
+	writeFile(t, src, "alpha.mp4", content)
 
 	nested := filepath.Join(src, "nested")
 	mustMkdir(t, nested)
-	writeFile(t, nested, "beta.mp4", "video")
+	writeFile(t, nested, "beta.mp4", content)
 
 	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
 	if res.err != nil {
@@ -221,11 +229,11 @@ func TestCLI_SkipsDuplicateMoviesByContent(t *testing.T) {
 		t.Fatalf("expected 1 file in movies, got %d", len(entries))
 	}
 
-	assertFileContent(t, filepath.Join(moviesDir, "alpha.mp4"), "video")
+	assertFileContent(t, filepath.Join(moviesDir, "alpha.mp4"), content)
 
 	warnPath := filepath.Join(dest, "warn.csv")
-	content := readFile(t, warnPath)
-	lines := strings.Split(strings.TrimSpace(content), "\n")
+	warnContent := readFile(t, warnPath)
+	lines := strings.Split(strings.TrimSpace(warnContent), "\n")
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 warning line, got %d", len(lines))
 	}
@@ -238,6 +246,35 @@ func TestCLI_SkipsDuplicateMoviesByContent(t *testing.T) {
 	}
 	if parts[1] != filepath.Join(dest, "movies", "alpha.mp4") {
 		t.Fatalf("unexpected dest in warn.csv: %s", parts[1])
+	}
+}
+
+func TestCLI_SkipsSmallImagesBySize(t *testing.T) {
+	workspace := t.TempDir()
+	src := filepath.Join(workspace, "src")
+	dest := filepath.Join(workspace, "dest")
+
+	mustMkdir(t, src)
+	// 512 KB - should be skipped
+	small := strings.Repeat("a", 512*1024)
+	writeFile(t, src, "small.jpg", small)
+	// 2 MB - should be copied
+	large := strings.Repeat("b", 2*1024*1024)
+	writeFile(t, src, "large.jpg", large)
+
+	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	if res.err != nil {
+		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
+	}
+
+	imagesDir := filepath.Join(dest, "images")
+	if _, err := os.Stat(filepath.Join(imagesDir, "small.jpg")); err == nil {
+		t.Fatalf("expected small image to be skipped")
+	}
+	assertFileContent(t, filepath.Join(imagesDir, "large.jpg"), large)
+
+	if _, err := os.Stat(filepath.Join(dest, "warn.csv")); err == nil {
+		t.Fatalf("warn.csv should not exist when only small images are skipped")
 	}
 }
 
