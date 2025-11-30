@@ -1,0 +1,31 @@
+categories:
+  - name: images
+    extensions:
+      - jpg
+      - jpeg
+      - png
+      - gif
+      - bmp
+      - webp
+  - name: movies
+    extensions:
+      - mp4
+      - mpeg
+      - mpg
+      - mov
+      - avi
+      - mkv
+  - name: documents
+    extensions:
+      - txt
+      - md
+      - pdf
+      - doc
+      - docx
+      - xls
+      - xlsx
+      - ppt
+      - pptx
+      - rtf
+      - log
+default_category: others

@@ -9,33 +9,50 @@ import (
 	"testing"
 )
 
-func TestCLI_CopiesDirectFiles(t *testing.T) {
+func TestCLI_ClassifiesFilesByConfig(t *testing.T) {
 	workspace := t.TempDir()
 	src := filepath.Join(workspace, "src")
 	dest := filepath.Join(workspace, "dest")
 
 	mustMkdir(t, src)
-	writeFile(t, src, "alpha.txt", "alpha")
-	writeFile(t, src, "bravo.log", "bravo")
-	writeFile(t, src, "charlie", "noext")
+	writeFile(t, src, "alpha.jpg", "alpha")
+	writeFile(t, src, "bravo.png", "bravo")
+	writeFile(t, src, "charlie.mp4", "charlie")
+	writeFile(t, src, "delta.txt", "delta")
+	writeFile(t, src, "echo", "noext")
 
 	nested := filepath.Join(src, "nested")
 	mustMkdir(t, nested)
 	writeFile(t, nested, "charlie.txt", "charlie")
 
-	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	configPath := filepath.Join(workspace, "config.yaml")
+	writeFile(t, workspace, "config.yaml", `categories:
+  - name: images
+    extensions: [jpg, jpeg, png]
+  - name: movies
+    extensions:
+      - mp4
+      - mpeg
+  - name: documents
+    extensions: [txt, log]
+default_category: others
+`)
+
+	res := runCLI(t, workspace, "-c", absPath(t, configPath), absPath(t, src), absPath(t, dest))
 	if res.err != nil {
 		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
 	}
 
-	assertFileContent(t, filepath.Join(dest, "txt", "alpha.txt"), "alpha")
-	assertFileContent(t, filepath.Join(dest, "log", "bravo.log"), "bravo")
-	assertFileContent(t, filepath.Join(dest, "no_ext", "charlie"), "noext")
+	assertFileContent(t, filepath.Join(dest, "images", "alpha.jpg"), "alpha")
+	assertFileContent(t, filepath.Join(dest, "images", "bravo.png"), "bravo")
+	assertFileContent(t, filepath.Join(dest, "movies", "charlie.mp4"), "charlie")
+	assertFileContent(t, filepath.Join(dest, "documents", "delta.txt"), "delta")
+	assertFileContent(t, filepath.Join(dest, "others", "echo"), "noext")
 
 	if _, err := os.Stat(filepath.Join(dest, "nested")); err == nil {
 		t.Fatalf("did not expect nested directory to be copied")
 	}
-	if _, err := os.Stat(filepath.Join(dest, "txt", "nested", "charlie.txt")); err == nil {
+	if _, err := os.Stat(filepath.Join(dest, "images", "nested", "charlie.txt")); err == nil {
 		t.Fatalf("did not expect nested files to be copied")
 	}
 }

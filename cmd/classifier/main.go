@@ -1,12 +1,30 @@
 package main
 
 import (
+	"embed"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
+
+type config struct {
+	Categories      []category `yaml:"categories"`
+	DefaultCategory string     `yaml:"default_category"`
+}
+
+type category struct {
+	Name       string   `yaml:"name"`
+	Extensions []string `yaml:"extensions"`
+}
+
+//go:embed config.yaml
+var embeddedFS embed.FS
 
 func main() {
 	if err := run(); err != nil {
@@ -16,16 +34,32 @@ func main() {
 }
 
 func run() error {
-	if len(os.Args) != 3 {
+	fs := flag.NewFlagSet("classifier", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var configPath string
+	fs.StringVar(&configPath, "config", "", "path to YAML config file")
+	fs.StringVar(&configPath, "c", "", "path to YAML config file")
+
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		return err
+	}
+
+	if fs.NArg() != 2 {
 		return usageError("expected 2 arguments: <src-abs-dir> <dest-abs-dir>")
 	}
 
-	src := os.Args[1]
-	dest := os.Args[2]
+	src := fs.Arg(0)
+	dest := fs.Arg(1)
 
 	if !filepath.IsAbs(src) || !filepath.IsAbs(dest) {
 		return usageError("source and destination must be absolute paths")
 	}
+
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	resolver := newCategoryResolver(cfg)
 
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -58,7 +92,7 @@ func run() error {
 			continue
 		}
 
-		category := extCategory(entry.Name())
+		category := resolver.categoryFor(entry.Name())
 		targetDir := filepath.Join(dest, category)
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("create category directory %s: %w", targetDir, err)
@@ -73,7 +107,77 @@ func run() error {
 }
 
 func usageError(msg string) error {
-	return errors.New(msg + "; usage: classifier <src-abs-dir> <dest-abs-dir>")
+	return errors.New(msg + "; usage: classifier [-config path|-c path] <src-abs-dir> <dest-abs-dir>")
+}
+
+func loadConfig(path string) (config, error) {
+	if path == "" {
+		return loadEmbeddedConfig()
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return config{}, fmt.Errorf("read config: %w", err)
+	}
+
+	var cfg config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return config{}, fmt.Errorf("parse config: %w", err)
+	}
+
+	return cfg, nil
+}
+
+func loadEmbeddedConfig() (config, error) {
+	var cfg config
+	data, err := embeddedFS.ReadFile("config.yaml")
+	if err != nil {
+		return config{}, fmt.Errorf("read embedded config: %w", err)
+	}
+
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return config{}, fmt.Errorf("parse embedded config: %w", err)
+	}
+
+	return cfg, nil
+}
+
+type categoryResolver struct {
+	defaultCategory string
+	extToCategory   map[string]string
+}
+
+func newCategoryResolver(cfg config) categoryResolver {
+	resolver := categoryResolver{
+		defaultCategory: cfg.DefaultCategory,
+		extToCategory:   map[string]string{},
+	}
+	if resolver.defaultCategory == "" {
+		resolver.defaultCategory = "others"
+	}
+
+	for _, cat := range cfg.Categories {
+		for _, ext := range cat.Extensions {
+			clean := strings.TrimPrefix(strings.ToLower(ext), ".")
+			if clean == "" {
+				continue
+			}
+			resolver.extToCategory[clean] = cat.Name
+		}
+	}
+
+	return resolver
+}
+
+func (r categoryResolver) categoryFor(name string) string {
+	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(name)), ".")
+	if ext == "" {
+		return r.defaultCategory
+	}
+	if cat, ok := r.extToCategory[ext]; ok {
+		return cat
+	}
+	return r.defaultCategory
 }
 
 func copyFile(src, dest string, perm os.FileMode) error {
@@ -94,12 +198,4 @@ func copyFile(src, dest string, perm os.FileMode) error {
 	}
 
 	return nil
-}
-
-func extCategory(name string) string {
-	ext := filepath.Ext(name)
-	if ext == "" {
-		return "no_ext"
-	}
-	return ext[1:]
 }
