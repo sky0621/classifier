@@ -132,7 +132,7 @@ func run() error {
 
 		targetDir := filepath.Join(dest, category)
 		if category == "images" || category == "movies" {
-			if year, ym, ok := dateResolver.resolve(path, name); ok {
+			if year, ym, ok := dateResolver.resolve(name); ok {
 				targetDir = filepath.Join(targetDir, year, ym)
 			}
 		}
@@ -257,27 +257,9 @@ func newDateResolver(patterns []string) (dateResolver, error) {
 	return res, nil
 }
 
-func (r dateResolver) resolve(fullPath, name string) (string, string, bool) {
-	// Prefer dates in directory names (closest to the file) over filenames.
-	dir := filepath.Dir(fullPath)
-	for dir != "" && dir != "." {
-		segment := filepath.Base(dir)
-		if year, ym, ok := r.resolveString(segment); ok {
-			return year, ym, true
-		}
-		next := filepath.Dir(dir)
-		if next == dir {
-			break
-		}
-		dir = next
-	}
-
-	return r.resolveString(name)
-}
-
-func (r dateResolver) resolveString(text string) (string, string, bool) {
+func (r dateResolver) resolve(name string) (string, string, bool) {
 	for _, re := range r.patterns {
-		matches := re.FindStringSubmatch(text)
+		matches := re.FindStringSubmatch(name)
 		if matches == nil {
 			continue
 		}

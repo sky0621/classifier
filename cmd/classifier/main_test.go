@@ -352,26 +352,6 @@ func TestCLI_PlacesImagesAndMoviesInDateFolders(t *testing.T) {
 	assertFileContent(t, filepath.Join(dest, "movies", "2023", "202307", "IMG_20230715_video.mp4"), "video")
 }
 
-func TestCLI_PrefersDirectoryDateOverFilename(t *testing.T) {
-	workspace := t.TempDir()
-	src := filepath.Join(workspace, "src")
-	dest := filepath.Join(workspace, "dest")
-
-	dirWithDate := filepath.Join(src, "2024-02-03")
-	mustMkdir(t, dirWithDate)
-
-	imgContent := strings.Repeat("z", 2*1024*1024)
-	writeFile(t, dirWithDate, "IMG_20230101_photo.jpg", imgContent)
-
-	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
-	if res.err != nil {
-		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
-	}
-
-	// Directory date (2024-02) should win over filename date (2023-01).
-	assertFileContent(t, filepath.Join(dest, "images", "2024", "202402", "IMG_20230101_photo.jpg"), imgContent)
-}
-
 func TestCLI_CopiesFilesWhenNoDateFound(t *testing.T) {
 	workspace := t.TempDir()
 	src := filepath.Join(workspace, "src")

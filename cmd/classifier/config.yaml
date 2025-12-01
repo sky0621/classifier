@@ -30,7 +30,7 @@ categories:
       - log
 default_category: others
 date_patterns:
-  # yyyy-mm-dd... e.g., 2024-01-31_photo.jpg
-  - (?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})
-  # IMG_yyyymmdd_... e.g., IMG_20240131_123456.jpg
-  - IMG_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})_
+  # yyyy-mm-dd... e.g., 2024-01-31_photo.jpg (must start with date)
+  - ^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})
+  # IMG_yyyymmdd_... e.g., IMG_20240131_123456.jpg (must start with IMG_)
+  - ^IMG_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})_
