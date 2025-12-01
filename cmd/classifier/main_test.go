@@ -249,6 +249,61 @@ func TestCLI_SkipsDuplicateMoviesByContent(t *testing.T) {
 	}
 }
 
+func TestCLI_SkipsDuplicateDocumentsByContent(t *testing.T) {
+	workspace := t.TempDir()
+	src := filepath.Join(workspace, "src")
+	dest := filepath.Join(workspace, "dest")
+
+	mustMkdir(t, src)
+	writeFile(t, src, "report.txt", "doc")
+
+	nested := filepath.Join(src, "nested")
+	mustMkdir(t, nested)
+	writeFile(t, nested, "copy.log", "doc")
+
+	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	if res.err != nil {
+		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
+	}
+
+	docsDir := filepath.Join(dest, "documents")
+	entries, err := os.ReadDir(docsDir)
+	if err != nil {
+		t.Fatalf("expected documents directory, got: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 file in documents, got %d", len(entries))
+	}
+
+	keptName := entries[0].Name()
+	keptPath := filepath.Join(docsDir, keptName)
+	assertFileContent(t, keptPath, "doc")
+
+	warnPath := filepath.Join(dest, "warn.csv")
+	content := readFile(t, warnPath)
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 warning line, got %d", len(lines))
+	}
+	parts := strings.Split(lines[0], ",")
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 columns in warn.csv, got %d", len(parts))
+	}
+	skippedSrc := parts[0]
+	existingDest := parts[1]
+
+	expectedKept := filepath.Join(dest, "documents", entries[0].Name())
+	if existingDest != expectedKept {
+		t.Fatalf("unexpected dest in warn.csv: %s", existingDest)
+	}
+
+	expectedSkipped := filepath.Join(src, "nested", "copy.log")
+	alternativeSkipped := filepath.Join(src, "report.txt")
+	if skippedSrc != expectedSkipped && skippedSrc != alternativeSkipped {
+		t.Fatalf("unexpected src in warn.csv: %s", skippedSrc)
+	}
+}
+
 func TestCLI_SkipsSmallImagesBySize(t *testing.T) {
 	workspace := t.TempDir()
 	src := filepath.Join(workspace, "src")

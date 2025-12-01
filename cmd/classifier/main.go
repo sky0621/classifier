@@ -38,11 +38,6 @@ type skippedEntry struct {
 	destPath string
 }
 
-var hashedCategories = map[string]bool{
-	"images": true,
-	"movies": true,
-}
-
 type dateResolver struct {
 	patterns []*regexp.Regexp
 }
@@ -98,7 +93,7 @@ func run() error {
 		return fmt.Errorf("create destination: %w", err)
 	}
 
-	categoryHashes := make(map[string]map[string]string)
+	hashIndex := make(map[string]string)
 	var skipped []skippedEntry
 
 	walkErr := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
@@ -126,19 +121,13 @@ func run() error {
 			return nil
 		}
 
-		var hash string
-		if hashedCategories[category] {
-			hash, err = fileHash(path)
-			if err != nil {
-				return err
-			}
-			if categoryHashes[category] == nil {
-				categoryHashes[category] = map[string]string{}
-			}
-			if existingPath, exists := categoryHashes[category][hash]; exists {
-				skipped = append(skipped, skippedEntry{srcPath: path, destPath: existingPath})
-				return nil
-			}
+		hash, err := fileHash(path)
+		if err != nil {
+			return err
+		}
+		if existingPath, exists := hashIndex[hash]; exists {
+			skipped = append(skipped, skippedEntry{srcPath: path, destPath: existingPath})
+			return nil
 		}
 
 		targetDir := filepath.Join(dest, category)
@@ -160,9 +149,7 @@ func run() error {
 			return err
 		}
 
-		if hashedCategories[category] && hash != "" {
-			categoryHashes[category][hash] = finalPath
-		}
+		hashIndex[hash] = finalPath
 
 		return nil
 	})
