@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -19,6 +20,7 @@ import (
 type config struct {
 	Categories      []category `yaml:"categories"`
 	DefaultCategory string     `yaml:"default_category"`
+	DatePatterns    []string   `yaml:"date_patterns"`
 }
 
 type category struct {
@@ -39,6 +41,10 @@ type skippedEntry struct {
 var hashedCategories = map[string]bool{
 	"images": true,
 	"movies": true,
+}
+
+type dateResolver struct {
+	patterns []*regexp.Regexp
 }
 
 func main() {
@@ -75,6 +81,10 @@ func run() error {
 		return err
 	}
 	resolver := newCategoryResolver(cfg)
+	dateResolver, err := newDateResolver(cfg.DatePatterns)
+	if err != nil {
+		return err
+	}
 
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -132,6 +142,11 @@ func run() error {
 		}
 
 		targetDir := filepath.Join(dest, category)
+		if category == "images" || category == "movies" {
+			if year, ym, ok := dateResolver.resolve(name); ok {
+				targetDir = filepath.Join(targetDir, year, ym)
+			}
+		}
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			return fmt.Errorf("create category directory %s: %w", targetDir, err)
 		}
@@ -237,6 +252,79 @@ func (r categoryResolver) categoryFor(name string) string {
 		return cat
 	}
 	return r.defaultCategory
+}
+
+func newDateResolver(patterns []string) (dateResolver, error) {
+	if len(patterns) == 0 {
+		return dateResolver{}, nil
+	}
+
+	res := dateResolver{patterns: make([]*regexp.Regexp, 0, len(patterns))}
+	for _, p := range patterns {
+		re, err := regexp.Compile(p)
+		if err != nil {
+			return dateResolver{}, fmt.Errorf("compile date pattern %q: %w", p, err)
+		}
+		res.patterns = append(res.patterns, re)
+	}
+	return res, nil
+}
+
+func (r dateResolver) resolve(name string) (string, string, bool) {
+	for _, re := range r.patterns {
+		matches := re.FindStringSubmatch(name)
+		if matches == nil {
+			continue
+		}
+
+		subexpNames := re.SubexpNames()
+		var year, month string
+		for i, v := range subexpNames {
+			if v == "year" {
+				year = matches[i]
+			}
+			if v == "month" {
+				month = matches[i]
+			}
+		}
+		if year == "" && len(matches) >= 3 {
+			year = matches[1]
+			month = matches[2]
+		}
+		if year == "" || month == "" {
+			year, month = fallbackYearMonth(matches)
+		}
+		if len(year) == 4 && len(month) == 2 {
+			return year, year + month, true
+		}
+	}
+	return "", "", false
+}
+
+func fallbackYearMonth(matches []string) (string, string) {
+	var year, month string
+	for _, m := range matches {
+		if len(m) == 4 && allDigits(m) && year == "" {
+			year = m
+			continue
+		}
+		if len(m) == 2 && allDigits(m) && month == "" {
+			month = m
+		}
+		if year != "" && month != "" {
+			break
+		}
+	}
+	return year, month
+}
+
+func allDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 func copyFile(src, dest string, perm os.FileMode) error {

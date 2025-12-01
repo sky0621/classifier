@@ -278,6 +278,25 @@ func TestCLI_SkipsSmallImagesBySize(t *testing.T) {
 	}
 }
 
+func TestCLI_PlacesImagesAndMoviesInDateFolders(t *testing.T) {
+	workspace := t.TempDir()
+	src := filepath.Join(workspace, "src")
+	dest := filepath.Join(workspace, "dest")
+
+	mustMkdir(t, src)
+	imgContent := strings.Repeat("p", 2*1024*1024)
+	writeFile(t, src, "photo_20240131.jpg", imgContent)
+	writeFile(t, src, "movie-2023-07-15.mp4", "video")
+
+	res := runCLI(t, workspace, absPath(t, src), absPath(t, dest))
+	if res.err != nil {
+		t.Fatalf("expected success, got error: %v, stderr: %s", res.err, res.stderr)
+	}
+
+	assertFileContent(t, filepath.Join(dest, "images", "2024", "202401", "photo_20240131.jpg"), imgContent)
+	assertFileContent(t, filepath.Join(dest, "movies", "2023", "202307", "movie-2023-07-15.mp4"), "video")
+}
+
 func TestCLI_RejectsRelativePaths(t *testing.T) {
 	workspace := t.TempDir()
 	src := filepath.Join(workspace, "src")
